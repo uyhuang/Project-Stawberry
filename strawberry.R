@@ -10,4 +10,7 @@ strwb_census <- strawberry |>
 strwb_survey <- strawberry |>
     filter(Program =="SURVEY")
 vals <- strwb_census$Value
-vals <- gsub("(D)", NA, vals)
+
+#gsub()
+g1 <- gsub("(D)", NA, vals)
+
