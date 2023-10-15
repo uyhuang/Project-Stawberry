@@ -1,15 +1,19 @@
 ---
 title: "Strawberry_EDA_Report"
 author: Yuchen Huang
-format: pdf
+format:
+    pdf:
+        code-line-numbers: true
 editor: visual
 ---
 
-## Quarto
+## Data acquisition and assessment
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+#### Data sources
 
-## Running Code
+#### Assumptions and motivations
+
+## Data cleaning and organization
 
 When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
 
@@ -25,3 +29,17 @@ You can add options to executable code like this
 ```
 
 The `echo: false` option disables the printing of code (only output is displayed).
+
+## References
+
+#### Material about strawberries
+
+[WHO says strawberries may not be so safe for you--2017March16](https://med.news.am/eng/news/13621/who-says-strawberries-may-not-be-so-safe-for-you.html)
+
+[Pesticides + poison gases = cheap, year-round strawberries 2019March20](https://www.ewg.org/foodnews/strawberries.php)
+
+[Multistate Outbreak of Hepatitis A Virus Infections Linked to Fresh Organic Strawberries-2022March5](https://www.cdc.gov/hepatitis/outbreaks/2022/hav-contaminated-food/index.htm)
+
+[Strawberry makes list of cancer-fighting foods-2023May31](https://issuu.com/mechlocal/docs/053123_mech_asf/s/25386339)
+
+#### Technical references
