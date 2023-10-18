@@ -11,17 +11,11 @@ editor: visual
 
 #### Data sources
 
+The Data Sources are from
+
 #### Assumptions and motivations
 
 ## Data cleaning and organization
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
-```{r}
-1 + 1
-```
-
-You can add options to executable code like this
 
 ```{r}
 #| echo: false
