@@ -126,7 +126,6 @@ remove(calif_census, calif_survey)
 ```{r}
 #| echo: false
 get_cas <- function(PC){
-    # 构建 URL
     path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", PC,"%22%7d%7d")
     r <- GET(url = path)
     r_text <- content(r, as = "text", encoding = "UTF-8")
@@ -137,7 +136,6 @@ get_cas <- function(PC){
     text <- ais
     matches <- regmatches(text, gregexpr(pattern, text))
     cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
-    cas <- as.integer(cas)
     return(cas[1])
 }
 
