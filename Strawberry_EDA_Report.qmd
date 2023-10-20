@@ -137,6 +137,10 @@ get_cas <- function(PC){
     text <- ais
     matches <- regmatches(text, gregexpr(pattern, text))
     cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
+<<<<<<< HEAD
+=======
+    cas <- as.integer(cas)
+>>>>>>> 6d256cb1d186c4682f659b4d46b406ea60b62aa6
     return(cas[1])
 }
 
