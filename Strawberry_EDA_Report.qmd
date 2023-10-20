@@ -1,5 +1,5 @@
 ---
-title: "Strawberry_EDA_Report"
+title: "Strawberry EDA Report"
 author: Yuchen Huang
 format:
     pdf:
@@ -11,17 +11,136 @@ editor: visual
 
 #### Data sources
 
-The data sources are from United States Department of Agriculture Statistics Service(USAS) National Agricultural Statistics Service(NASS).
+The data have been sourced from the National Agricultural Statistics Service (NASS) of the United States Department of Agriculture (USDA). This data pertains to strawberries cultivated in the United States in 2021, detailing their market categories and associated pesticide use. The information was gathered through both census and survey methods.
 
 #### Assumptions and motivations
 
-Even though the strawberry contains chemical compounds that might help reduce the risk of getting cancer, whether the strawberry is healthy to people still need to be decided. Some articles believe that strawberries may not be safe because the pesticides using of them are potentially toxic and may have negative effect of reproduction, and the presticides cannot be fully remove after washing. On contrary, Centers for
+While strawberries contain compounds that might help lower the risk of cancer, their overall health benefits remain debated. Some sources raise concerns over the potentially toxic pesticides used on strawberries, suggesting that these chemicals, which might not be completely removed after washing, could have negative reproductive effects. Conversely, the Centers for Disease Control and Prevention issued a food safety alert in 2022 linking fresh organic strawberries to a multistate outbreak of Hepatitis A Virus infections. Therefore, we aim to use the NASS data on U.S. strawberries from 2021 to investigate whether organic strawberries or conventionally grown strawberries carry pesticides that are more harmful to human health, as well as factors related to the production and sale of strawberries.
 
 ## Data cleaning and organization
 
 ```{r}
+#| label: Load libraries
+#| warning: false
+#| message: false
 #| echo: false
-2 * 2
+
+library(knitr)  
+library(kableExtra)
+library(tidyverse)
+library(stringr)
+
+```
+
+```{r warning=FALSE, message=FALSE}
+#| label: read data - glimpse 
+#| warning: false
+#| message: false
+#| echo: false
+
+### reading data
+strawberry <- read_csv("strawberry.csv", col_names = TRUE)
+#glimpse(stawberry)
+
+```
+
+#### Remove NA columns
+
+After loading libraries and reading data strawberry, The first step of data cleaning is removing all the columns containing only NA.
+
+```{r}
+#| echo: false
+### function of drop columns with single value
+drop_one_value_col <- function(df){
+drop <- NULL
+for(i in 1:dim(df)[2]){
+if((df |> distinct(df[,i]) |> count()) == 1){
+drop = c(drop, i)
+} }
+
+if(is.null(drop)){return("none")}else{
+
+   print("Columns dropped:")
+   print(colnames(df)[drop])
+   strawberry <- df[, -1*drop]
+   }
+}
+
+strawberry <- drop_one_value_col(strawberry)
+```
+
+#### Check if every line of strawberries data is associated with a state
+
+Next, we examine the data and check if every line of strawberries data is associated with a state. Then we figure out the states that containing most data of strawberries.
+
+```{r}
+#| label: examine rows
+#| echo: false
+
+state_all <- strawberry |> group_by(State) |> count()
+if(sum(state_all$n) == dim(strawberry)[1]){print("Every row has value in the State column.")}
+
+state_max <- state_all$State[which(state_all$n == max(state_all$n))]
+paste("The state with the most rows of data is", state_max, "with", max(state_all$n),"rows.")
+```
+
+The state with the most row of data is `r paste(state_max)` with `r paste(max(state_all$n))` rows.
+
+#### Examine California
+
+Now we have California as the state with most data, so we want to examine California.
+
+```{r}
+#| echo: false
+calif_census <- strawberry |> filter((State=="CALIFORNIA") & (Program=="CENSUS"))
+calif_survey <- strawberry |> filter((State=="CALIFORNIA") & (Program=="SURVEY"))
+
+census_col <- colnames(calif_census)
+survey_col <- colnames(calif_survey)
+```
+
+Here's the composite columns:
+
+Census: `r paste(census_col[c(6, 8)])`
+
+Survey: `r paste(survey_col[c(6,7,8)])`
+
+Based of the result we found in California data, we can find a way to separate the strawberry data.
+
+#### Separate CENSUS and SURVEY into two Data Frames
+
+In the strawberry data frame, The CENSUS rows contains marketing, sales, and production data. The SURVEY rows contain rows which may be redundant with the CENSUS rows and chemical application rows.
+
+```{r}
+#| echo: false
+
+strwb_census <- strawberry |> filter(Program=="CENSUS")
+strwb_survey <- strawberry |> filter(Program=="SURVEY")
+
+#clean up environment
+remove(calif_census, calif_survey)
+```
+
+#### Function getting CAS using PC code
+
+```{r}
+#| echo: false
+get_cas <- function(PC){
+    # 构建 URL
+    path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", PC,"%22%7d%7d")
+    r <- GET(url = path)
+    r_text <- content(r, as = "text", encoding = "UTF-8")
+    df <- fromJSON(r_text, flatten = TRUE)
+    df_strwb <- df$items[grepl("Strawberries", df$items$sites, fixed=T),]
+    ais <- df_strwb$ais[1]
+    pattern <- "\\(([^A-Za-z]+)\\/([0-9-]+)\\)"
+    text <- ais
+    matches <- regmatches(text, gregexpr(pattern, text))
+    cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
+    return(cas[1])
+}
+
+cas <- get_cas(138009)
 ```
 
 ## References
@@ -35,6 +154,8 @@ Even though the strawberry contains chemical compounds that might help reduce th
 [Multistate Outbreak of Hepatitis A Virus Infections Linked to Fresh Organic Strawberries-2022March5](https://www.cdc.gov/hepatitis/outbreaks/2022/hav-contaminated-food/index.htm)
 
 [Strawberry makes list of cancer-fighting foods-2023May31](https://issuu.com/mechlocal/docs/053123_mech_asf/s/25386339)
+
+[Multistate Outbreak of Hepatitis A Virus Infections Linked to Fresh Organic Strawberries-2022March5](https://www.cdc.gov/hepatitis/outbreaks/2022/hav-contaminated-food/index.htm)
 
 #### Technical references
 
