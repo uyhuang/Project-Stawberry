@@ -11,9 +11,11 @@ editor: visual
 
 #### Data sources
 
-The Data Sources are from
+The data sources are from United States Department of Agriculture Statistics Service(USAS) National Agricultural Statistics Service(NASS).
 
 #### Assumptions and motivations
+
+Even though the strawberry contains chemical compounds that might help reduce the risk of getting cancer, whether the strawberry is healthy to people still need to be decided. Some articles believe that strawberries may not be safe because the pesticides using of them are potentially toxic and may have negative effect of reproduction, and the presticides cannot be fully remove after washing. On contrary, Centers for
 
 ## Data cleaning and organization
 
@@ -21,8 +23,6 @@ The Data Sources are from
 #| echo: false
 2 * 2
 ```
-
-The `echo: false` option disables the printing of code (only output is displayed).
 
 ## References
 
@@ -37,3 +37,15 @@ The `echo: false` option disables the printing of code (only output is displayed
 [Strawberry makes list of cancer-fighting foods-2023May31](https://issuu.com/mechlocal/docs/053123_mech_asf/s/25386339)
 
 #### Technical references
+
+In their handbook ["An introduction to data cleaning with R"](https://cran.r-project.org/doc/contrib/de_Jonge+van_der_Loo-Introduction_to_data_cleaning_with_R.pdf) by Edwin de Jonge and Mark van der Loo, de Jonge and van der Loo go into detail about specific data cleaning isssues and how to handle them in R.
+
+["Problems, Methods, and Challenges in Comprehensive Data Cleansing" by Heiko Müller and JohannChristoph Freytag is a good companion](https://www.researchgate.net/publication/228929938_Problems_methods_and_challenges_in_comprehensive_data_cleansing) to the de Jonge and van der Loo handbook, offering additional insights.
+
+## Initial Questions
+
+## The data
+
+## EDA
+
+## Other Reference
