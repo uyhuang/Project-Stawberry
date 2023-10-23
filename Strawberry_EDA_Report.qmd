@@ -11,13 +11,13 @@ editor: visual
 
 #### Data sources
 
-The data have been sourced from the National Agricultural Statistics Service (NASS) of the United States Department of Agriculture (USDA). This data pertains to strawberries cultivated in the United States in 2021, detailing their market categories and associated pesticide use. The information was gathered through both census and survey methods.
+The data have been sourced from the National Agricultural Statistics Service (NASS) of the United States Department of Agriculture (USDA). This data pertains to strawberries cultivated in the United States, detailing their market categories and associated pesticide use. The information was gathered through both census and survey methods.
 
 Another data is "The WHO Recommended Classification of Pesticides by Hazard", so that we can use the form to determine the toxicity of the pesticides used in the strawberry data.
 
 #### Assumptions and motivations
 
-While strawberries contain compounds that might help lower the risk of cancer, their overall health benefits remain debated. Some sources raise concerns over the potentially toxic pesticides used on strawberries, suggesting that these chemicals, which might not be completely removed after washing, could have negative reproductive effects. Conversely, the Centers for Disease Control and Prevention issued a food safety alert in 2022 linking fresh organic strawberries to a multistate outbreak of Hepatitis A Virus infections. Therefore, we aim to use the NASS data on U.S. strawberries from 2021 to investigate whether organic strawberries or conventionally grown strawberries carry pesticides that are more harmful to human health, as well as factors related to the production and sale of strawberries.
+While strawberries contain compounds that might help lower the risk of cancer, their overall health benefits remain debated. Some sources raise concerns over the potentially toxic pesticides used on strawberries, suggesting that these chemicals, which might not be completely removed after washing, could have negative reproductive effects. Conversely, the Centers for Disease Control and Prevention issued a food safety alert in 2022 linking fresh organic strawberries to a multistate outbreak of Hepatitis A Virus infections. Therefore, we aim to use the NASS data on U.S. strawberries to investigate whether organic strawberries or conventionally grown strawberries carry pesticides that are more harmful to human health, as well as factors related to the production and sale of strawberries.
 
 ## Data cleaning and organization
 
@@ -34,6 +34,7 @@ library(stringr)
 library(httr)
 library(jsonlite)
 library(openxlsx)
+library(RColorBrewer)
 ```
 
 ```{r warning=FALSE, message=FALSE}
@@ -513,42 +514,28 @@ n = length(PC_form$PC)
 CAS <- rep(NA,n)
 for (i in 1:n){
     CAS[i] <- get_cas(PC_form$PC[i])
-    print(i)
-    print(PC_form$PC[i])
-    print(CAS[i])
 }
 PC_form$CAS <- CAS
 
-strwb_survey <- left_join(strwb_survey, PC_form, by="PC")
+strwb_survey <- left_join(strwb_survey, PC_form, by= "PC")
 ```
 
-#### Create a `Tox` Column
-
-```{r}
-
-strwb_survey <- left_join(strwb_survey, toxicity, by="CAS")
-```
-
-#### Function getting CAS using PC code
+#### Create a `Class` Column
 
 ```{r}
 #| echo: false
-# function that can translate PC to CAS
-get_cas <- function(PC){
-    path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", PC,"%22%7d%7d")
-    r <- GET(url = path)
-    r_text <- content(r, as = "text", encoding = "UTF-8")
-    df <- fromJSON(r_text, flatten = TRUE)
-    df_strwb <- df$items[grepl("Strawberries", df$items$sites, fixed=T),]
-    ais <- df_strwb$ais[1]
-    pattern <- "\\(([^A-Za-z]+)\\/([0-9-]+)\\)"
-    text <- ais
-    matches <- regmatches(text, gregexpr(pattern, text))
-    cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
-    return(cas[1])
-}
 
-cas <- get_cas(138009)
+strwb_survey <- left_join(strwb_survey, toxicity, by= "CAS")
+```
+
+#### Clean up the survey data
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |> relocate(CAS, .after = PC)
+strwb_survey <- strwb_survey |> relocate(Class, .after = CAS)
+strwb_survey <- strwb_survey |> relocate(Value, .after = Metric)
 ```
 
 ## References
@@ -573,8 +560,204 @@ In their handbook ["An introduction to data cleaning with R"](https://cran.r-pro
 
 ## Initial Questions
 
+-   How are the sales of organic strawberries in different markets?
+
+-   How are the sales of non-organic strawberries in different markets?
+
+-   Which has better sales, organic or non-organic strawberries?
+
+-   What is the toxicity of non-organic strawberries that use different kinds of pesticides?
+
 ## The data
+
+Here's some explanation of the columns' names
+
+`Value` : Understand it combining with metrics. For example, the metric is lb, then we should understand the value as the production of this type of strawberry is `Value` lb.
+
+`Cide` : The type of pesticide that is applied on the strawberry.
+
+`Bearing` : Application of bearing means that the pesticide was applied on the fruit.
 
 ## EDA
 
-## Other Reference
+### Census Data
+
+#### Operations with sales
+
+```{r}
+#| echo: false
+#| warning: false
+#| Plot 1
+
+plot1_data <- strwb_census |>
+    select(c(Year, State, Totals, `Fresh Market`, `Process Market`, Metric, Value)) |>
+    filter((`Fresh Market`== "OPERATIONS WITH SALES")|(`Process Market`=="OPERATIONS WITH SALES")|(Totals == "OPERATIONS WITH SALES"))
+plot1_data <- plot1_data |>
+    filter(as.numeric(Value) > 10)
+plot1_data$Totals <- plot1_data$Totals |>
+    str_replace("OPERATIONS WITH SALES", "Totals")
+plot1_data$`Fresh Market` <- plot1_data$`Fresh Market` |>
+    str_replace("OPERATIONS WITH SALES", "Fresh Market")
+plot1_data$`Process Market` <- plot1_data$`Process Market` |>
+    str_replace("OPERATIONS WITH SALES", "Process Markert")
+plot1_data <- plot1_data |>
+    unite(col = "Market", Totals, `Fresh Market`, `Process Market`, sep = "")
+plot1_data$Value <- as.numeric(plot1_data$Value)
+
+plot1_data |>
+    ggplot(aes(x = Year, y = Value, color = State))+
+    geom_point(size = 3)+
+    facet_wrap(~Market, ncol = 3)+
+    labs(
+        title = "Organic Strawberry Operation with Sales",
+        subtitle = "With Value larger than 10"
+    ) +
+    geom_smooth(aes(x = Year, y = Value ), method = "lm", se = F, size = 0.5)+
+    theme_light() + 
+    theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 10, face = "bold"),
+        axis.title.y = element_text(size = 10, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.text = element_text(size = 8)
+    )
+```
+
+From this Plot we can see that California provide the most operation with sales, and the trend in time scale is decreasing for most states.
+
+```{r}
+#| echo: false
+#| warning: false
+#| Plot 2
+
+plot2_data <- strwb_census |>
+    select(c(Year, State, Totals, `Fresh Market`, `Process Market`, Metric, Value)) |>
+    filter((`Fresh Market`== "SALES")|(`Process Market`=="SALES")|(Totals == "SALES"))
+plot2_data$Value <- gsub(",", "", plot2_data$Value)
+plot2_data$Value <- as.numeric(plot2_data$Value)
+plot2_data <- plot2_data |>
+    filter((as.numeric(Value) > 50000)&(Metric == "$"))
+plot2_data$Totals <- plot2_data$Totals |>
+    str_replace("SALES", "Totals")
+plot2_data$`Fresh Market` <- plot2_data$`Fresh Market` |>
+    str_replace("SALES", "Fresh Market")
+plot2_data$`Process Market` <- plot2_data$`Process Market` |>
+    str_replace("SALES", "Process Markert")
+plot2_data <- plot2_data |>
+    unite(col = "Market", Totals, `Fresh Market`, `Process Market`, sep = "")
+
+
+plot2_data |>
+    ggplot(aes(x = Year, y = Value, color = State)) +
+    geom_point(size = 3) +
+    facet_wrap(~Market, ncol = 3) +
+    labs(
+        title = "Organic Strawberry Sales",
+        subtitle = "With Value larger than 50,000$",
+        y = "Values in $"
+    ) +
+    geom_smooth(aes(x = Year, y = Value ), method = "lm", se = F, size = 0.5)+
+    theme_light() + 
+    theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 10, face = "bold"),
+        axis.title.y = element_text(size = 10, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.text = element_text(size = 8)
+    )
+```
+
+From this Plot we can see that California provide the most sales profit in \$, and the trend in time scale is increasing for most states.
+
+### Survey Data
+
+#### Toxicity
+
+```{r}
+#| echo: false
+#| warning: false
+#| Plot 3
+
+plot3_data <- strwb_survey |>
+    select(c(Year, State, `Cide Type`, Class)) |>
+    filter((`Cide Type` != "") &(is.na(Class)==F))
+
+plot3_data$Class <- gsub("U", 1, plot3_data$Class)
+plot3_data$Class <- gsub("III", 2, plot3_data$Class)
+plot3_data$Class <- gsub("II", 3, plot3_data$Class)
+plot3_data$Class <- gsub("Ib", 4, plot3_data$Class)
+
+plot3_data |>
+    ggplot(aes(x = State, fill = Class))+
+    facet_wrap(~Year, ncol = 4)+
+    geom_bar(stat = "count", position = "dodge")+
+        theme_light() + 
+    labs(
+        title = "Frequency of Pesticides with Different Toxicity used on Strawberry ",
+        subtitle = "In four states in time seires",
+        y = "Number of products",
+        x = "States"
+    ) +
+    theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 10, face = "bold"),
+        axis.title.y = element_text(size = 10, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.text = element_text(size = 8)
+    )
+
+```
+
+The class represents the toxicity of pesticide, with 1 meaning minimally toxicity and 4 meaning severe toxicity. FM here means Fumigant. We can observe that in the past 2016, 2018, 2019 years, California used "level 3" moderate toxicity on the largest proportion of strawberry product, and on average, the other three states used moderate toxicity pesticides most frequently.
+
+#### Average Toxicity
+
+```{r}
+#| echo: false
+#| warning: false
+#| Plot 3
+
+plot4_data <- strwb_survey |>
+    select(c(State, Year, Class)) |>
+    filter(is.na(Class)==F)
+plot4_data$Class <- gsub("U", 1, plot4_data$Class)
+plot4_data$Class <- gsub("III", 2, plot4_data$Class)
+plot4_data$Class <- gsub("II", 3, plot4_data$Class)
+plot4_data$Class <- gsub("Ib", 4, plot4_data$Class)
+plot4_data$Class <- gsub("FM", 0, plot4_data$Class)
+plot4_data$Class <- as.numeric(plot4_data$Class)
+mean <- plot4_data |>
+  group_by(State, Year) |>
+  summarise(mean = mean(Class))
+
+
+
+ggplot(mean, aes(x = State, y = mean, fill = State)) +
+    facet_wrap(~Year, ncol = 4)+
+    geom_bar(stat = "identity") +
+    ylim(0,3)+
+    labs(title = "Average Toxicity by State",
+       x = "State",
+       y = "Average Toxicity") +
+    theme_light()+
+        theme(
+        plot.title = element_text(size = 14, face = "bold"),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 10, face = "bold"),
+        axis.title.y = element_text(size = 10, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8),
+        legend.title = element_text(size = 10, face = "bold"),
+        legend.text = element_text(size = 8)
+    )
+
+```
