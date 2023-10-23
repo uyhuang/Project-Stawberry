@@ -25,7 +25,7 @@ View(df$items[grepl("Sorghum", df$items$sites, fixed=T),])
 ex <- df$items[grepl("Strawberries", df$items$sites, fixed=T),]
 ## Get strawberry PC code in a column
 ## contruct the path s.t.
-paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22",PC,"%22%7d%7d")
+paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22",138009,"%22%7d%7d")
 
 # the for each PC code in our column, make a unique path
 # convert the json to a data frame
@@ -71,3 +71,15 @@ get_cas <- function(PC){
     return(ais)
 }
 print(get_cas(138009))
+
+path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", 138009,"%22%7d%7d")
+r <- GET(url = path)
+r_text <- content(r, as = "text", encoding = "UTF-8")
+df <- fromJSON(r_text, flatten = TRUE)
+df_strwb <- df$items[grepl("Strawberries", df$items$sites, fixed=T),]
+ais <- df_strwb$ais[1]
+pattern <- "\\(([^A-Za-z]+)\\/([0-9-]+)\\)"
+text <- ais
+matches <- regmatches(text, gregexpr(pattern, text))
+cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
+return(cas[1])

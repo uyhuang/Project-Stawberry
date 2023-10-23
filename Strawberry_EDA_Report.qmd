@@ -13,6 +13,8 @@ editor: visual
 
 The data have been sourced from the National Agricultural Statistics Service (NASS) of the United States Department of Agriculture (USDA). This data pertains to strawberries cultivated in the United States in 2021, detailing their market categories and associated pesticide use. The information was gathered through both census and survey methods.
 
+Another data is "The WHO Recommended Classification of Pesticides by Hazard", so that we can use the form to determine the toxicity of the pesticides used in the strawberry data.
+
 #### Assumptions and motivations
 
 While strawberries contain compounds that might help lower the risk of cancer, their overall health benefits remain debated. Some sources raise concerns over the potentially toxic pesticides used on strawberries, suggesting that these chemicals, which might not be completely removed after washing, could have negative reproductive effects. Conversely, the Centers for Disease Control and Prevention issued a food safety alert in 2022 linking fresh organic strawberries to a multistate outbreak of Hepatitis A Virus infections. Therefore, we aim to use the NASS data on U.S. strawberries from 2021 to investigate whether organic strawberries or conventionally grown strawberries carry pesticides that are more harmful to human health, as well as factors related to the production and sale of strawberries.
@@ -29,7 +31,9 @@ library(knitr)
 library(kableExtra)
 library(tidyverse)
 library(stringr)
-
+library(httr)
+library(jsonlite)
+library(openxlsx)
 ```
 
 ```{r warning=FALSE, message=FALSE}
@@ -40,8 +44,21 @@ library(stringr)
 
 ### reading data
 strawberry <- read_csv("strawberry.csv", col_names = TRUE)
-#glimpse(stawberry)
 
+t1 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 2)
+t2 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 3)
+t3 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 4)
+t4 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 5)
+t5 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 6)
+t6 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 7)
+t7 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 8)
+t8 <- read_excel("WHO - CAS-to-SeverityTable.xlsx", sheet = 9)
+toxicity <- data.frame(
+    CAS = c(t1$`50-00-0`, t2$`113-48-4`, t3$`1085-98-9`, t4$`4482-55-7`, t5$`21609-90-5`, t6$`50594-66-6`, t7$`81335-77-5`, t8$`153719-23-4`),
+    Class = c(t1$FM, t2$III, t3$U, t4$O, t5$O, t6$II, t7$U, t8$II)
+)
+rm(t1, t2, t3, t4, t5, t6, t7, t8)
+#glimpse(stawberry)
 ```
 
 #### Remove NA columns
@@ -54,9 +71,9 @@ After loading libraries and reading data strawberry, The first step of data clea
 drop_one_value_col <- function(df){
 drop <- NULL
 for(i in 1:dim(df)[2]){
-if((df |> distinct(df[,i]) |> count()) == 1){
-drop = c(drop, i)
-} }
+    if((df |> distinct(df[,i]) |> count()) == 1){
+        drop = c(drop, i)
+}}
 
 if(is.null(drop)){return("none")}else{
 
@@ -113,7 +130,6 @@ In the strawberry data frame, The CENSUS rows contains marketing, sales, and pro
 
 ```{r}
 #| echo: false
-
 strwb_census <- strawberry |> filter(Program=="CENSUS")
 strwb_survey <- strawberry |> filter(Program=="SURVEY")
 
@@ -121,10 +137,403 @@ strwb_survey <- strawberry |> filter(Program=="SURVEY")
 remove(calif_census, calif_survey)
 ```
 
+### Clean and organize Census data frame
+
+#### Seperate `Data Item` into columns by ","
+
+```{r}
+#| echo: false
+
+strwb_census <- strwb_census |>
+    separate_wider_delim(cols = `Data Item`,
+                         delim = ",",
+                         names = c("Fruit",
+                                   "temp1",
+                                   "temp2",
+                                   "temp3"),
+                         too_few = "align_start",
+                         too_many = "error")
+strwb_census <- strwb_census |>
+    separate_wider_delim(cols = temp1,
+                         delim = " - ",
+                         names = c("crop_type",
+                                 "prop_acct"),
+                         too_few = "align_start",
+                         too_many = "error")
+
+strwb_census$crop_type <- str_trim(strwb_census$crop_type, side = "both")
+strwb_census$temp2 <- str_trim(strwb_census$temp2, side = "both")
+strwb_census$temp3 <- str_trim(strwb_census$temp3, side = "both")
+```
+
+In this step, we divide the `Item data` column into 4 columns, containing different information like crop type and fruit type.
+
+#### Create a `Fresh Market` Column
+
+```{r}
+strwb_census <- strwb_census |>
+    mutate(`Fresh Market` = temp2, .after = temp2)
+strwb_census$`Fresh Market` <- strwb_census$`Fresh Market` |> str_replace("^MEA.*", "")
+strwb_census$`Fresh Market` <- strwb_census$`Fresh Market` |> str_replace("^P.*", "")
+strwb_census$`Fresh Market`[is.na(strwb_census$`Fresh Market`)] <- ""
+
+strwb_census$temp2 <- strwb_census$temp2 |> str_replace("^FRE.*", "")
+
+strwb_census$`Fresh Market` <- strwb_census$`Fresh Market` |> str_replace("^FRESH MARKET - ", "")
+```
+
+Here we create a column named `Fresh Market` containing only the information after "Fresh Market".
+
+#### Create a `Process Market` Column
+
+```{r}
+#| echo: false
+
+strwb_census <- strwb_census |> mutate(`Process Market` = temp2, .after = temp2)
+
+strwb_census$`Process Market` <-  strwb_census$`Process Market` |> str_replace("^MEA.*", "")
+strwb_census$`Process Market`[is.na(strwb_census$`Process Market`)] <- ""
+
+strwb_census$temp2 <- strwb_census$temp2 |> str_replace("^P.*", "")
+
+strwb_census$`Process Market` <-  strwb_census$`Process Market` |> str_replace("PROCESSING - ", "") 
+
+## substitute a space for NA 
+strwb_census$prop_acct[is.na(strwb_census$prop_acct)] <- "" 
+strwb_census$temp2[is.na(strwb_census$temp2)] <- "" 
+strwb_census$temp3[is.na(strwb_census$temp3)] <- "" 
+```
+
+Here we create a column named `Fresh Market` containing only the information after "Fresh Market", and remove NA's from prop_acct, temp2, and temp3.
+
+#### Clean up the data into named columns
+
+```{r}
+#| echo: false
+
+strwb_census <- strwb_census |> unite(col = "Metric", temp2, temp3, sep="")
+
+## Now fix the entries in the Metric column
+##   Remove "MEASURED IN " from the cells
+strwb_census$Metric <- strwb_census$Metric |> str_replace("MEASURED IN ", "")
+
+## move Metric to the end
+strwb_census <- strwb_census |> relocate(Metric, .before = Domain)
+strwb_census <- strwb_census |> relocate(`Process Market`, .before = Metric)
+strwb_census <- strwb_census |> rename(Totals = prop_acct)
+
+#drop_one_value_col(strwb_census)
+
+#Remove "(D)" in value column
+strwb_census$Value <- ifelse(strwb_census$Value == "(D)", NA, strwb_census$Value)
+strwb_census$`CV (%)` <- ifelse(strwb_census$`CV (%)` == "(D)", NA, strwb_census$`CV (%)`)
+strwb_census$`CV (%)` <- ifelse(strwb_census$`CV (%)` == "(H)", NA, strwb_census$`CV (%)`)
+```
+
+### Clean and organize Survey data frame
+
+```{r}
+#| echo: false
+strwb_survey <- strawberry |> filter(Program=="SURVEY")
+#glimpse(strwb_survey)
+c6 <- distinct(strwb_survey[,6])
+#c6 |> kable()
+c8 <- distinct(strwb_survey[,8])
+#c8 |> kable()
+```
+
+After observing the survey data, we can see that columns `Data Item` and `Domain Category` need to be cleaned and organized.
+
+#### Separate `Data Item` into columns by ","
+
+```{r}
+#| echo: false
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = `Data Item`,
+                         delim = ",",
+                         names = c("Fruit",
+                                 "temp1",
+                                 "temp2",
+                                 "temp3"),
+                         too_many = "error",
+                         too_few = "align_start"
+    )
+
+strwb_survey$temp1 <- str_trim(strwb_survey$temp1, side = "both")
+strwb_survey$temp2 <- str_trim(strwb_survey$temp2, side = "both")
+strwb_survey$temp3 <- str_trim(strwb_survey$temp3, side = "both")
+
+strwb_survey$temp1[is.na(strwb_survey$temp1)] <- ""
+strwb_survey$temp2[is.na(strwb_survey$temp2)] <- ""
+strwb_survey$temp3[is.na(strwb_survey$temp3)] <- ""
+```
+
+#### Create a `Totals` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = Fruit,
+                        delim = " - ",
+                        names = c("Fruit", "Totals"),
+                        too_many = "error",
+                        too_few = "align_start")
+
+strwb_survey$Totals[is.na(strwb_survey$Totals)] <- ""
+```
+
+#### Create a `Fresh Market` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    mutate(`Fresh Market` = temp1, .after = temp1)
+
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("^MEA.*", "")
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("^PRO.*", "")
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("^BEA.*", "")
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("^NO.*", "")
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("^UTI.*", "")
+
+strwb_survey$temp1 <- strwb_survey$temp1 |> str_replace("^FRE.*", "")
+
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("FRESH MARKET - ", "") 
+strwb_survey$`Fresh Market` <-  strwb_survey$`Fresh Market` |> str_replace("FRESH MARKET", "") 
+```
+
+#### Create a `Process Market` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    mutate(`Process Market` = temp1, .after = temp1)
+
+strwb_survey$`Process Market`<- strwb_survey$`Process Market` |> str_replace("^MEA.*", "")
+strwb_survey$`Process Market`<- strwb_survey$`Process Market` |> str_replace("^BEA.*", "")
+strwb_survey$`Process Market`<- strwb_survey$`Process Market` |> str_replace("^UTI.*", "")
+strwb_survey$`Process Market`<- strwb_survey$`Process Market` |> str_replace("^NO.*", "")
+
+strwb_survey$temp1 <- strwb_survey$temp1 |> str_replace("^PRO.*", "")
+
+strwb_survey$`Process Market` <- strwb_survey$`Process Market` |> str_replace("PROCESSING - ", "")
+strwb_survey$`Process Market` <- strwb_survey$`Process Market` |> str_replace("PROCESSING", "")
+```
+
+#### Create a `Not Sold` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    mutate(`Not Sold` = temp1, .after = temp1)
+
+strwb_survey$`Not Sold` <- strwb_survey$`Not Sold` |> str_replace("^MEA.*", "")
+strwb_survey$`Not Sold` <- strwb_survey$`Not Sold` |> str_replace("^UTI.*", "")
+strwb_survey$`Not Sold` <- strwb_survey$`Not Sold` |> str_replace("^BEA.*", "")
+
+strwb_survey$temp1 <- strwb_survey$temp1 |> str_replace("^NO.*", "")
+
+strwb_survey$`Not Sold` <- strwb_survey$`Not Sold` |> str_replace("NOT SOLD - ", "")
+```
+
+#### Create a `Utilized` column
+
+```{r}
+#| echo: false
+
+#temp1
+strwb_survey <- strwb_survey |>
+    mutate(`Utilized` = temp1, .after = temp1)
+
+strwb_survey$Utilized <- strwb_survey$Utilized |> str_replace("^MEA.*", "")
+strwb_survey$Utilized <- strwb_survey$Utilized |> str_replace("^BEA.*", "")
+
+strwb_survey$temp1 <- strwb_survey$temp1 |> str_replace("^UTI.*", "")
+
+#temp2
+strwb_survey <- strwb_survey |>
+    mutate(Utilized1 = temp2, .after = Utilized)
+
+strwb_survey$Utilized1 <- strwb_survey$Utilized1 |> str_replace("^MEA.*", "")
+
+strwb_survey$temp2 <- strwb_survey$temp2 |> str_replace("^UTI.*", "")
+
+#Combine together
+strwb_survey <- strwb_survey |> unite(col = "Utilized", Utilized, Utilized1, sep="")
+
+strwb_survey$Utilized <- strwb_survey$Utilized |> str_replace("UTILIZED - ", "")
+```
+
+#### Create a `Bearing` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    mutate(Bearing = temp1, .after = temp1)
+
+strwb_survey$Bearing <- strwb_survey$Bearing |> str_replace("^MEA.*", "")
+
+strwb_survey$temp1 <- strwb_survey$temp1 |> str_replace("^BEA.*", "")
+
+strwb_survey$Bearing <- strwb_survey$Bearing |> str_replace("BEARING - ", "")
+```
+
+#### Create a `Metric` column and clean up
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |> unite(col = "Metric", temp1, temp2, temp3, sep="")
+strwb_survey$Metric <- strwb_survey$Metric |> str_replace("MEASURED IN ", "")
+
+strwb_survey <- strwb_survey |> relocate(Metric, .before = Domain)
+```
+
+#### Separate `Domain Category` into columns by ","
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+  separate_wider_delim(  cols = `Domain Category`,
+                         delim = ",",
+                         names = c("General Type",
+                                 "temp43",
+                                 "temp44",
+                                 "temp45"),
+                         too_many = "error",
+                         too_few = "align_start"
+                       )
+
+strwb_survey$temp43[is.na(strwb_survey$temp43)] <- ""
+strwb_survey$temp44[is.na(strwb_survey$temp44)] <- ""
+strwb_survey$temp45[is.na(strwb_survey$temp45)] <- ""
+```
+
+#### Create a `Cide Type` column
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = "temp43",
+                         delim = ": (",
+                         names = c("Cide Type", "temp46"),
+                         too_many = "error",
+                         too_few = "align_start")
+strwb_survey$`Cide Type` <- str_trim(strwb_survey$`Cide Type`, side = "both")
+strwb_survey$temp46[is.na(strwb_survey$temp46)] <- ""
+```
+
+#### Create `Chemical Name` and `PC` columns
+
+```{r}
+#| echo: false
+
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = "temp46",
+                         delim = " = ",
+                         names = c("Chemical Name","PC"),
+                         too_few = "align_start",
+                         too_many = "error")
+strwb_survey$PC[is.na(strwb_survey$PC)] <- ""
+
+#Combine temp44 to Chemical Name and PC
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = "temp44",
+                         delim = " = ",
+                         names = c("Chemical Name1", "PC1"),
+                         too_few = "align_start",
+                         too_many = "error")
+strwb_survey$`Chemical Name1`[is.na(strwb_survey$`Chemical Name1`)] <- ""
+strwb_survey$PC1[is.na(strwb_survey$PC1)] <- ""
+
+strwb_survey <- strwb_survey |> unite(col = "Chemical Name", `Chemical Name`, `Chemical Name1`, sep = "")
+strwb_survey <- strwb_survey |> unite(col = "PC", PC, PC1, sep = "")
+
+#Combine temp45 to Chemical Name and PC
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = "temp45",
+                         delim = " = ",
+                         names = c("Chemical Name1", "PC1"),
+                         too_few = "align_start",
+                         too_many = "error")
+strwb_survey$`Chemical Name1`[is.na(strwb_survey$`Chemical Name1`)] <- ""
+strwb_survey$PC1[is.na(strwb_survey$PC1)] <- ""
+
+strwb_survey <- strwb_survey |> unite(col = "Chemical Name", `Chemical Name`, `Chemical Name1`, sep = "")
+strwb_survey <- strwb_survey |> unite(col = "PC", PC, PC1, sep = "")
+
+#Remove "(" in Chemical Name and ")" in PC
+strwb_survey$`Chemical Name` <- str_trim(strwb_survey$`Chemical Name`, side = "both")
+strwb_survey <- strwb_survey |>
+    separate_wider_delim(cols = "PC",
+                         delim = ")",
+                         names = c("PC", "del"),
+                         too_few = "align_start",
+                         too_many = "drop")
+strwb_survey <- strwb_survey[,-19]
+```
+
+#### Create a `CAS` column
+
+```{r}
+#| echo: false
+
+# function that can translate PC to CAS
+get_cas <- function(PC){
+    PC <- sprintf("%06d", as.numeric(PC))
+    path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", PC,"%22%7d%7d")
+    r <- GET(url = path)
+    r_text <- content(r, as = "text", encoding = "UTF-8")
+    df <- fromJSON(r_text, flatten = TRUE)
+    df_strwb <- df$items[grepl("Strawberries", df$items$sites, fixed=T),]
+    ais <- df_strwb$ais[1]
+    pattern <- "\\(([^A-Za-z]+)\\/([0-9-]+)\\)"
+    text <- ais
+    matches <- regmatches(text, gregexpr(pattern, text))
+    cas <- sapply(matches, function(x) gsub(".*\\/([0-9-]+)\\)", "\\1", x)) 
+    if (is.character(cas)) {
+        return(cas[1])
+} 
+    else {
+        return("can't find")
+}
+}
+
+# Create a PC t0 CAS form for the survey data
+PC_form <- data.frame(
+    PC = unique(strwb_survey$PC)[-1]
+)
+n = length(PC_form$PC)
+CAS <- rep(NA,n)
+for (i in 1:n){
+    CAS[i] <- get_cas(PC_form$PC[i])
+    print(i)
+    print(PC_form$PC[i])
+    print(CAS[i])
+}
+PC_form$CAS <- CAS
+
+strwb_survey <- left_join(strwb_survey, PC_form, by="PC")
+```
+
+#### Create a `Tox` Column
+
+```{r}
+
+strwb_survey <- left_join(strwb_survey, toxicity, by="CAS")
+```
+
 #### Function getting CAS using PC code
 
 ```{r}
 #| echo: false
+# function that can translate PC to CAS
 get_cas <- function(PC){
     path <- paste0("https://ordspub.epa.gov/ords/pesticides/apprilapi/?q=%7b%22ais%22:%7b%22$instr%22:%22", PC,"%22%7d%7d")
     r <- GET(url = path)
