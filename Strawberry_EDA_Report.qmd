@@ -33,6 +33,7 @@ library(tidyverse)
 library(stringr)
 library(httr)
 library(jsonlite)
+library(readxl)
 library(openxlsx)
 library(RColorBrewer)
 ```
@@ -517,6 +518,27 @@ for (i in 1:n){
 }
 PC_form$CAS <- CAS
 
+#Fix wrong data in PC_form
+PC_form$CAS[130] <- "can't find"
+PC_form$CAS[79] <- "8002-65-1"
+PC_form$CAS[85] <- "8003-34-7"
+PC_form$CAS[109] <- "can't find"
+PC_form$CAS[98] <- "76674-21-0"
+PC_form$CAS[69] <- "39515-41-8"
+PC_form$CAS[9] <- "188425-85-6"
+PC_form$CAS[163] <- "57754-85-5"
+PC_form$CAS[141] <- "32341-80-3"
+PC_form$CAS[94] <- "124-07-2"
+PC_form$CAS[121] <- "133-32-4"
+PC_form$CAS[96] <- "76-06-2"
+PC_form$CAS[35] <- "23564-05-8"
+PC_form$CAS[136] <- "can't find"
+PC_form$CAS[83] <- "51-03-6"
+PC_form$CAS[100] <- "7722-84-1"
+PC_form$CAS[95] <- "8023-77-6"
+PC_form$CAS[82] <- "64742-89-8"
+
+
 strwb_survey <- left_join(strwb_survey, PC_form, by= "PC")
 ```
 
@@ -582,12 +604,13 @@ Here's some explanation of the columns' names
 
 ### Census Data
 
+In the following two plots I will focus on Census Data, and analysze the data from different markets in different metrics.
+
 #### Operations with sales
 
 ```{r}
 #| echo: false
 #| warning: false
-#| Plot 1
 
 plot1_data <- strwb_census |>
     select(c(Year, State, Totals, `Fresh Market`, `Process Market`, Metric, Value)) |>
@@ -609,7 +632,7 @@ plot1_data |>
     geom_point(size = 3)+
     facet_wrap(~Market, ncol = 3)+
     labs(
-        title = "Organic Strawberry Operation with Sales",
+        title = "Organic Strawberry - Operation with Sales",
         subtitle = "With Value larger than 10"
     ) +
     geom_smooth(aes(x = Year, y = Value ), method = "lm", se = F, size = 0.5)+
@@ -621,17 +644,20 @@ plot1_data |>
         axis.title.y = element_text(size = 10, face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
         axis.text.y = element_text(size = 8),
-        legend.title = element_text(size = 10, face = "bold"),
+        legend.title = element_text(size = 8, face = "bold"),
         legend.text = element_text(size = 8)
     )
 ```
 
-From this Plot we can see that California provide the most operation with sales, and the trend in time scale is decreasing for most states.
+In this form I consider all the organic stawberry have operations with sale, and pick the States that have value larger than 10, then categorize them into three markets of strawberry. Also, I add a linear regression line for each state, and the line indicates how the value of operations changing as time goes by.
+
+From this Plot we can see that California provide the most operation with sales, and the trend in time scale is slightly decreasing for most states. Also, the Process Market is not working good for all the states.
+
+#### Sales of Organic Strawberry
 
 ```{r}
 #| echo: false
 #| warning: false
-#| Plot 2
 
 plot2_data <- strwb_census |>
     select(c(Year, State, Totals, `Fresh Market`, `Process Market`, Metric, Value)) |>
@@ -639,7 +665,7 @@ plot2_data <- strwb_census |>
 plot2_data$Value <- gsub(",", "", plot2_data$Value)
 plot2_data$Value <- as.numeric(plot2_data$Value)
 plot2_data <- plot2_data |>
-    filter((as.numeric(Value) > 50000)&(Metric == "$"))
+    filter((as.numeric(Value) > 100000)&(Metric == "$"))
 plot2_data$Totals <- plot2_data$Totals |>
     str_replace("SALES", "Totals")
 plot2_data$`Fresh Market` <- plot2_data$`Fresh Market` |>
@@ -656,8 +682,8 @@ plot2_data |>
     facet_wrap(~Market, ncol = 3) +
     labs(
         title = "Organic Strawberry Sales",
-        subtitle = "With Value larger than 50,000$",
-        y = "Values in $"
+        subtitle = "With Value larger than 100,000$",
+        y = "Profit of Sales($)"
     ) +
     geom_smooth(aes(x = Year, y = Value ), method = "lm", se = F, size = 0.5)+
     theme_light() + 
@@ -668,12 +694,14 @@ plot2_data |>
         axis.title.y = element_text(size = 10, face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
         axis.text.y = element_text(size = 8),
-        legend.title = element_text(size = 10, face = "bold"),
+        legend.title = element_text(size = 8, face = "bold"),
         legend.text = element_text(size = 8)
     )
 ```
 
-From this Plot we can see that California provide the most sales profit in \$, and the trend in time scale is increasing for most states.
+Here I focus on the Profit of Sales of organic strawberries, and I focus only on those states that created over 100,000 \$ profit of saling organic strawberry. Just like the previous graph, I observe the data in the scales of 3 markets.
+
+From this Plot we can see that California provide the most sales profit in \$, and the trend in time scale is increasing for most states. However, still, the Process market is not doing well.
 
 ### Survey Data
 
@@ -682,7 +710,6 @@ From this Plot we can see that California provide the most sales profit in \$, a
 ```{r}
 #| echo: false
 #| warning: false
-#| Plot 3
 
 plot3_data <- strwb_survey |>
     select(c(Year, State, `Cide Type`, Class)) |>
@@ -724,7 +751,6 @@ The class represents the toxicity of pesticide, with 1 meaning minimally toxicit
 ```{r}
 #| echo: false
 #| warning: false
-#| Plot 3
 
 plot4_data <- strwb_survey |>
     select(c(State, Year, Class)) |>
@@ -761,3 +787,5 @@ ggplot(mean, aes(x = State, y = mean, fill = State)) +
     )
 
 ```
+
+Here I calculate the average toxicity of non-organic strawberries in different states in 2016, 2018, 2019, 2021. If we just look at 2016 data, Oregon has the least toxic strawberry. However, since we are missing the data of Oregon in the following three years, we cannot get a conclusion that Oregon has the healthiest strawberry. Comparing the strawberry from California and Florida, we can say the toxicity in these two regions is similar.
